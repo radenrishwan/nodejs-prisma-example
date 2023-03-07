@@ -1,54 +1,12 @@
 import express from 'express';
-import jwt from 'jsonwebtoken'
 import prisma from '../utils/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import authMiddleware from '../middleware/auth.js';
+import {body} from "express-validator";
 
 const articleRouter = express.Router();
 
-articleRouter.use((req, res, next) => {
-    // get bearer token
-    const bearerHeader = req.headers['authorization']
-
-    if (bearerHeader === undefined) {
-        res.json({
-            code: 401,
-            message: "Unauthorized",
-            data: null
-        })
-
-        return
-    }
-
-    const [key, token] = bearerHeader.split(' ')
-
-    if (key.toLocaleLowerCase() !== "bearer") {
-        res.json({
-            code: 401,
-            message: "Token is not valid",
-            data: null
-        })
-
-        return
-    }
-
-    try {
-        var decoded = jwt.verify(token, 'secret'); // TODO: move secret to env variable
-        res.locals.decoded = decoded
-    } catch(err) {
-        res.json({
-            code: 401,
-            message: "Token is not valid",
-            data: null
-        })
-
-        return
-      }
-
-   
-      
-
-    next()
-}) // TODO: move to auth.js later
+articleRouter.use(authMiddleware) // TODO: move to auth.js later
 
 articleRouter.get("/api/article", async (req, res) => {
     const user = await prisma.user.findFirst({
@@ -56,6 +14,7 @@ articleRouter.get("/api/article", async (req, res) => {
             email: res.locals.decoded.email
         }
     })
+
     const articles = await prisma.article.findMany({
         where: {
             authorId: user.id
@@ -69,7 +28,10 @@ articleRouter.get("/api/article", async (req, res) => {
     })
 })
 
-articleRouter.post("/api/article", async (req, res) => {
+articleRouter.post("/api/article",
+    body('title').notEmpty().isLength({min: 8}).withMessage('Title is required or minimum 8 characters'),
+    body('content').notEmpty().isLength({min: 8}).withMessage('Content is required, minimum 8 characters'),
+    async (req, res) => {
     const { title, content } = req.body
 
     const user = await prisma.user.findFirst({
@@ -91,6 +53,20 @@ articleRouter.post("/api/article", async (req, res) => {
     res.json({
         code: 200,
         message: "Success create article",
+        data: article
+    })
+})
+
+articleRouter.get("/api/article/:id", async (req, res) => {
+    const article = await prisma.article.findFirst({
+        where: {
+            id: req.params.id
+        }
+    })
+
+    res.json({
+        code: 200,
+        message: "Success get article",
         data: article
     })
 })
